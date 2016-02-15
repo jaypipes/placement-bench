@@ -20,7 +20,7 @@ def run(args, request_queue, result_queue, done_event):
     engine = db.placement_get_engine()
     conn = engine.connect()
 
-    worker_number = multiprocessing.current_process().name.split('-')[1]
+    worker_number = int(multiprocessing.current_process().name.split('-')[1]) - 1
     res = result.Result()
     res.process = worker_number
 
@@ -30,10 +30,10 @@ def run(args, request_queue, result_queue, done_event):
         """
         LOG.debug("Sending results to result queue.")
         result_queue.put(res)
-        LOG.debug("Setting done event.")
-        done_event.set()
         conn.close()
         engine.dispose()
+        LOG.debug("Setting done event.")
+        done_event.set()
 
     def get_selected_provider():
         """
@@ -50,6 +50,9 @@ def run(args, request_queue, result_queue, done_event):
         if args.filter_strategy == 'python':
             filtered = []
             for row in records:
+                if args.partition_strategy == 'modulo':
+                    if ((row['id'] + args.workers) % worker_number) != 0:
+                        continue
                 # Filter out by RAM
                 ram_available = (row['ram_total'] - row['ram_reserved']) * row['ram_allocation_ratio']
                 ram_used = float(row['ram_used'] or 0)
@@ -93,6 +96,9 @@ def run(args, request_queue, result_queue, done_event):
 
         instance_uuid = entry[0]
         res_template = entry[1]
+        ask_ram = res_template[const.RAM_MB]
+        ask_cpu = res_template[const.VCPU]
+
         LOG.debug("Attempting to place instance %s request for %dMB RAM "
                   "and %d vCPUs." %
                   (instance_uuid,
@@ -105,9 +111,11 @@ def run(args, request_queue, result_queue, done_event):
         res.placement_query_count += 1
 
         if not selected:
-            LOG.info("No available space in datacenter for request for %d RAM and %d CPU" %
-                     (res_template[const.RAM_MB], res_template[const.VCPU]))
             res.placement_no_found_provider_count += 1
+            LOG.debug("Did not find a provider with required inventory for "
+                      "requested %d MB RAM and %d CPU" % (ask_ram, ask_cpu))
+            LOG.info("No available space in datacenter for request for %d "
+                     "MB RAM and %d CPU" % (ask_ram, ask_cpu))
             send_results()
             return
 
@@ -149,7 +157,7 @@ def run(args, request_queue, result_queue, done_event):
                 trx_time = time.time() - start_trx_time
                 res.add_claim_trx_time(trx_time)
                 sleep_time = random.uniform(0.01, 0.10)
-                res.total_deadlock_sleep_time += sleep_time
+                res.claim_total_deadlock_sleep_time += sleep_time
                 time.sleep(sleep_time)
                 raise Exception("deadlocked, retrying transaction")
 

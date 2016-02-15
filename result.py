@@ -6,11 +6,13 @@ class Result(object):
     def __init__(self):
         self.process = None
         self.requests_processed_count = 0
+        self.retry_requests_processed_count = 0
 
         # Placement query stats
         self.placement_query_count = 0
         self.placement_found_provider_count = 0
         self.placement_no_found_provider_count = 0
+        self.placement_retry_partition_count = 0
         self.placement_total_query_time = 0
         self.placement_min_query_time = sys.maxint
         self.placement_max_query_time = 0
