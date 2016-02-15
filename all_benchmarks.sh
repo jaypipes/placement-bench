@@ -8,6 +8,7 @@ for rows in 1 2 4 8; do
                     # to an output file that we then read in to perform
                     # the same scenario tests for the multi-worker variants
                     python benchmark.py --workers=1 \
+                        --rows=$rows \
                         --out-requests-file=requests.yaml \
                         --schema=$schema \
                         --filter-strategy=$filter_strategy \
@@ -16,6 +17,7 @@ for rows in 1 2 4 8; do
                         --results-file=results.txt
                     for workers in 2 4 8; do
                         python benchmark.py --workers=$workers \
+                            --rows=$rows \
                             --in-requests-file=requests.yaml \
                             --schema=$schema \
                             --filter-strategy=$filter_strategy \

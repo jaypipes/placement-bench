@@ -3,6 +3,8 @@
 This repository contains a framework for testing out various scheduler designs
 and placement strategies.
 
+## Installation
+
 First, clone this repo and install the dependencies in a virtualenv:
 
 ```
@@ -12,6 +14,8 @@ $ virtualenv --no-site-packages venv
 $ source venv/bin/activate
 (venv)$ pip install -r requirements.txt
 ```
+
+## Running
 
 The command for running the benchmarks is well-documented:
 
@@ -77,3 +81,15 @@ optional arguments:
                         the --in-requests-file option when you want to run
                         different scenarios using identical requests sets.
 ```
+
+# To Do
+
+There are a number of items I need to complete work on:
+
+1. Correct an issue where the `random` placement strategy execution stops
+   on the first attempt at placement.
+
+2. Add support for the legacy Nova database schema
+
+3. Emulate claims occurring on the distributed compute nodes instead of in
+   the scheduler decision-making process.
