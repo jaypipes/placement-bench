@@ -16,6 +16,7 @@ import placement
 
 LOG = logging.getLogger('main')
 
+RESULTS_FORMAT_CHOICES = ('text', 'csv')
 SCHEMA_CHOICES = ('placement', 'legacy')
 FILTER_STRATEGY_CHOICES = ('db', 'python')
 PLACEMENT_STRATEGY_CHOICES = ('pack', 'spread', 'random', 'random-pack', 'random-spread')
@@ -71,7 +72,7 @@ def queue_instance_requests(args, request_queue):
     total_ram = int(math.floor(total_ram_per * num_nodes))
     # Add some fudging factor to ensure we always have more requests
     # than could possibly fit on all nodes.
-    total_ram += (1024 * 100 * num_nodes * args.workers)
+    total_ram += (1024 * 32 * num_nodes)
 
     num_requests = 0
     requests = []
@@ -124,42 +125,104 @@ def print_compiled_results(args, results, total_wallclock_time):
     claim_max_trx_time = max(r.claim_max_trx_time for r in results)
     claim_total_deadlock_sleep_time = sum(r.claim_total_deadlock_sleep_time for r in results)
 
-    outfile.write("==============================================================\n")
-    outfile.write("                          Results\n")
-    outfile.write("==============================================================\n")
-    outfile.write("  Number of compute nodes:            %d\n" % calc_num_nodes_from_args(args))
-    outfile.write("  Number of scheduler processes:      %d\n" % len(results))
-    outfile.write("  Number of requests processed:       %d\n" % requests_processed_count)
-    outfile.write("  Schema:                             %s\n" % args.schema)
-    outfile.write("  Filter strategy:                    %s\n" % args.filter_strategy)
-    outfile.write("  Placement strategy:                 %s\n" % args.placement_strategy)
-    outfile.write("  Partition strategy:                 %s\n" % args.partition_strategy)
-    outfile.write("  Do claim in scheduler?              %s\n" % do_claim_in_scheduler)
-    outfile.write("  Total wallclock time:               %7.5f\n" % total_wallclock_time)
-    outfile.write("--------------------------------------------------------------\n")
-    outfile.write(" Placement operations\n")
-    outfile.write("--------------------------------------------------------------\n")
-    outfile.write("  Count placement queries:            %d\n" % placement_query_count)
-    outfile.write("  Count found provider:               %d\n" % placement_found_provider_count)
-    outfile.write("  Count not found provider:           %d\n" % placement_no_found_provider_count)
-    outfile.write("  Count random no found retries:      %d\n" % placement_random_no_found_retry_count)
-    outfile.write("  Total time filtering:               %7.5f\n" % placement_total_query_time)
-    outfile.write("  Avg time to filter:                 %7.5f\n" % placement_avg_query_time)
-    outfile.write("  Min time to filter:                 %7.5f\n" % placement_min_query_time)
-    outfile.write("  Max time to filter:                 %7.5f\n" % placement_max_query_time)
-    outfile.write("--------------------------------------------------------------\n")
-    outfile.write(" Claim operations\n")
-    outfile.write("--------------------------------------------------------------\n")
-    outfile.write("  Count claim transactions:           %d\n" % claim_trx_count)
-    outfile.write("  Count successful claims:            %d\n" % claim_success_count)
-    outfile.write("  Count transaction rollbacks:        %d\n" % claim_trx_rollback_count)
-    outfile.write("  Count claim deadlocks:              %d\n" % claim_deadlock_count)
-    outfile.write("  Total time deadlock sleeping:       %7.5f\n" % claim_total_deadlock_sleep_time)
-    outfile.write("  Total time in claim transactions:   %7.5f\n" % claim_total_trx_time)
-    outfile.write("  Avg time in claim transaction:      %7.5f\n" % claim_avg_trx_time)
-    outfile.write("  Min time in claim transaction:      %7.5f\n" % claim_min_trx_time)
-    outfile.write("  Max time in claim transaction:      %7.5f\n" % claim_max_trx_time)
-    outfile.write("==============================================================\n")
+    if args.results_format == 'text':
+        outfile.write("==============================================================\n")
+        outfile.write("                          Results\n")
+        outfile.write("==============================================================\n")
+        outfile.write("  Schema:                             %s\n" % args.schema)
+        outfile.write("  Filter strategy:                    %s\n" % args.filter_strategy)
+        outfile.write("  Placement strategy:                 %s\n" % args.placement_strategy)
+        outfile.write("  Partition strategy:                 %s\n" % args.partition_strategy)
+        outfile.write("  Do claim in scheduler?              %s\n" % do_claim_in_scheduler)
+        outfile.write("  Number of compute nodes:            %d\n" % calc_num_nodes_from_args(args))
+        outfile.write("  Number of scheduler processes:      %d\n" % len(results))
+        outfile.write("  Number of requests processed:       %d\n" % requests_processed_count)
+        outfile.write("  Total wallclock time:               %7.5f\n" % total_wallclock_time)
+        outfile.write("--------------------------------------------------------------\n")
+        outfile.write(" Placement operations\n")
+        outfile.write("--------------------------------------------------------------\n")
+        outfile.write("  Count placement queries:            %d\n" % placement_query_count)
+        outfile.write("  Count found provider:               %d\n" % placement_found_provider_count)
+        outfile.write("  Count not found provider:           %d\n" % placement_no_found_provider_count)
+        outfile.write("  Count random no found retries:      %d\n" % placement_random_no_found_retry_count)
+        outfile.write("  Total time filtering:               %7.5f\n" % placement_total_query_time)
+        outfile.write("  Avg time to filter:                 %7.5f\n" % placement_avg_query_time)
+        outfile.write("  Min time to filter:                 %7.5f\n" % placement_min_query_time)
+        outfile.write("  Max time to filter:                 %7.5f\n" % placement_max_query_time)
+        outfile.write("--------------------------------------------------------------\n")
+        outfile.write(" Claim operations\n")
+        outfile.write("--------------------------------------------------------------\n")
+        outfile.write("  Count claim transactions:           %d\n" % claim_trx_count)
+        outfile.write("  Count successful claims:            %d\n" % claim_success_count)
+        outfile.write("  Count transaction rollbacks:        %d\n" % claim_trx_rollback_count)
+        outfile.write("  Count claim deadlocks:              %d\n" % claim_deadlock_count)
+        outfile.write("  Total time deadlock sleeping:       %7.5f\n" % claim_total_deadlock_sleep_time)
+        outfile.write("  Total time in claim transactions:   %7.5f\n" % claim_total_trx_time)
+        outfile.write("  Avg time in claim transaction:      %7.5f\n" % claim_avg_trx_time)
+        outfile.write("  Min time in claim transaction:      %7.5f\n" % claim_min_trx_time)
+        outfile.write("  Max time in claim transaction:      %7.5f\n" % claim_max_trx_time)
+        outfile.write("==============================================================\n")
+    else:
+        if args.results_csv_print_header_row:
+            header_fields = [
+                "Schema",
+                "Filter strategy",
+                "Placement strategy",
+                "Partition strategy",
+                "Do claim in scheduler?",
+                "Number of nodes",
+                "Number of worker processes",
+                "Count of requests processed",
+                "Total wallclock time",
+                "Placement query count",
+                "Placement found provider count",
+                "Placement no found provider count",
+                "Placement random no found retry count",
+                "Placement total query time",
+                "Placement avg query time",
+                "Placement min query time",
+                "Placement max query time",
+                "Claim trx count",
+                "Claim success count",
+                "Claim trx rollback count",
+                "Claim deadlock count",
+                "Claim total deadlock sleep time",
+                "Claim total trx time",
+                "Claim avg trx time",
+                "Claim min trx time",
+                "Claim max trx time",
+            ]
+            outfile.write(','.join(header_fields) + '\n')
+        row_fields = [
+            args.schema,
+            args.filter_strategy,
+            args.placement_strategy,
+            args.partition_strategy,
+            do_claim_in_scheduler,
+            calc_num_nodes_from_args(args),
+            len(results),
+            requests_processed_count,
+            total_wallclock_time,
+            placement_query_count,
+            placement_found_provider_count,
+            placement_no_found_provider_count,
+            placement_random_no_found_retry_count,
+            placement_total_query_time,
+            placement_avg_query_time,
+            placement_min_query_time,
+            placement_max_query_time,
+            claim_trx_count,
+            claim_success_count,
+            claim_trx_rollback_count,
+            claim_deadlock_count,
+            claim_total_deadlock_sleep_time,
+            claim_total_trx_time,
+            claim_avg_trx_time,
+            claim_min_trx_time,
+            claim_max_trx_time,
+        ]
+        outfile.write(','.join(str(f) for f in row_fields) + '\n')
+
     outfile.flush()
 
     if args.results_file is not None:
@@ -171,10 +234,18 @@ def main():
     parser.add_argument('--verbose', action="store_true",
                         default=False,
                         help="Show more output during run.")
+    parser.add_argument('--quiet', action="store_true",
+                        default=False,
+                        help="Show no output during run.")
+    parser.add_argument('--results-format', choices=RESULTS_FORMAT_CHOICES,
+                        help="The format of the resulting report.")
     parser.add_argument('--results-file',
                         help="If set, output results to supplied file "
                              "instead of stdout. If file exists, will "
                              "append to the file.")
+    parser.add_argument('--results-csv-print-header-row', action="store_true",
+                        default=False,
+                        help="Write a row into the CSV file for the headers.")
     parser.add_argument('--schema', choices=SCHEMA_CHOICES,
                         help="The schema to use for database layout.")
     parser.add_argument('--filter-strategy',
@@ -260,7 +331,10 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    log_level = logging.DEBUG if args.verbose else logging.INFO
+    log_level = (logging.DEBUG if args.verbose
+                 else (logging.WARNING if args.quiet
+                       else logging.INFO))
+
     log_fmt = '%(levelname)7s: (%(process)d) %(message)s'
     logging.basicConfig(format=log_fmt, level=log_level)
     if schema == 'placement':
