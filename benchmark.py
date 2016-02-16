@@ -18,7 +18,7 @@ LOG = logging.getLogger('main')
 
 SCHEMA_CHOICES = ('placement', 'legacy')
 FILTER_STRATEGY_CHOICES = ('db', 'python')
-PLACEMENT_STRATEGY_CHOICES = ('pack', 'spread', 'random')
+PLACEMENT_STRATEGY_CHOICES = ('pack', 'spread', 'random', 'random-pack', 'random-spread')
 PARTITION_STRATEGY_CHOICES = ('modulo', 'none')
 
 # Defaults here model a typical 256GB dual-socket i7 with 12 hardware threads
@@ -107,11 +107,10 @@ def print_compiled_results(args, results, total_wallclock_time):
 
     placement_total_query_time = sum(r.placement_total_query_time for r in results)
     requests_processed_count = sum(r.requests_processed_count for r in results)
-    retry_requests_processed_count = sum(r.retry_requests_processed_count for r in results)
     placement_query_count = sum(r.placement_query_count for r in results)
     placement_found_provider_count = sum(r.placement_found_provider_count for r in results)
     placement_no_found_provider_count = sum(r.placement_no_found_provider_count for r in results)
-    placement_retry_partition_count = sum(r.placement_retry_partition_count for r in results)
+    placement_random_no_found_retry_count = sum(r.placement_random_no_found_retry_count for r in results)
     placement_avg_query_time = placement_total_query_time / placement_query_count
     placement_min_query_time = min(r.placement_min_query_time for r in results)
     placement_max_query_time = max(r.placement_max_query_time for r in results)
@@ -131,7 +130,6 @@ def print_compiled_results(args, results, total_wallclock_time):
     outfile.write("  Number of compute nodes:            %d\n" % calc_num_nodes_from_args(args))
     outfile.write("  Number of scheduler processes:      %d\n" % len(results))
     outfile.write("  Number of requests processed:       %d\n" % requests_processed_count)
-    outfile.write("  Number of retry requests processed: %d\n" % retry_requests_processed_count)
     outfile.write("  Schema:                             %s\n" % args.schema)
     outfile.write("  Filter strategy:                    %s\n" % args.filter_strategy)
     outfile.write("  Placement strategy:                 %s\n" % args.placement_strategy)
@@ -144,7 +142,7 @@ def print_compiled_results(args, results, total_wallclock_time):
     outfile.write("  Count placement queries:            %d\n" % placement_query_count)
     outfile.write("  Count found provider:               %d\n" % placement_found_provider_count)
     outfile.write("  Count not found provider:           %d\n" % placement_no_found_provider_count)
-    outfile.write("  Count retries to new partition:     %d\n" % placement_retry_partition_count)
+    outfile.write("  Count random no found retries:      %d\n" % placement_random_no_found_retry_count)
     outfile.write("  Total time filtering:               %7.5f\n" % placement_total_query_time)
     outfile.write("  Avg time to filter:                 %7.5f\n" % placement_avg_query_time)
     outfile.write("  Min time to filter:                 %7.5f\n" % placement_min_query_time)

@@ -12,7 +12,7 @@ class Result(object):
         self.placement_query_count = 0
         self.placement_found_provider_count = 0
         self.placement_no_found_provider_count = 0
-        self.placement_retry_partition_count = 0
+        self.placement_random_no_found_retry_count = 0
         self.placement_total_query_time = 0
         self.placement_min_query_time = sys.maxint
         self.placement_max_query_time = 0

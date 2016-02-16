@@ -15,6 +15,14 @@ import result
 LOG = logging.getLogger('placement')
 
 
+class NoRowsMatched(Exception):
+    pass
+
+
+class RandomNotFound(Exception):
+    pass
+
+
 def run(args, request_queue, result_queue, done_event):
     (rp_tbl, agg_tbl, rp_agg_tbl, inv_tbl, alloc_tbl) = db.placement_get_tables()
     engine = db.placement_get_engine()
@@ -23,6 +31,10 @@ def run(args, request_queue, result_queue, done_event):
     worker_number = int(multiprocessing.current_process().name.split('-')[1]) - 1
     res = result.Result()
     res.process = worker_number
+    smallest_ram = min(r[const.RAM_MB] for r in const.RESOURCE_TEMPLATES)
+    # This is the total number of no provider found occurrences we will
+    # tolerate if the placement strategy is 'random'.
+    random_no_found_threshold = 20
 
     def send_results():
         """
@@ -35,7 +47,7 @@ def run(args, request_queue, result_queue, done_event):
         LOG.debug("Setting done event.")
         done_event.set()
 
-    def get_selected_provider():
+    def select_provider():
         """
         Return a resource provider that matches the requested resource
         amounts.
@@ -82,48 +94,7 @@ def run(args, request_queue, result_queue, done_event):
                 else:
                     return filtered[0]
 
-    while True:
-        # Grab an entry from the request queue. Entries are a tuple of the form
-        # (uuid, resource_template).
-        entry = request_queue.get()
-        if entry is None:
-            LOG.info("No more entries in request queue after processing "
-                     "%d requests. Sending results." % res.requests_processed_count)
-            send_results()
-            return
-
-        res.requests_processed_count += 1
-
-        instance_uuid = entry[0]
-        res_template = entry[1]
-        ask_ram = res_template[const.RAM_MB]
-        ask_cpu = res_template[const.VCPU]
-
-        LOG.debug("Attempting to place instance %s request for %dMB RAM "
-                  "and %d vCPUs." %
-                  (instance_uuid,
-                   res_template[const.RAM_MB],
-                   res_template[const.VCPU]))
-
-        start_placement_query_time = time.time()
-        selected = get_selected_provider()
-        res.add_placement_query_time(time.time() - start_placement_query_time)
-        res.placement_query_count += 1
-
-        if not selected:
-            res.placement_no_found_provider_count += 1
-            LOG.debug("Did not find a provider with required inventory for "
-                      "requested %d MB RAM and %d CPU" % (ask_ram, ask_cpu))
-            LOG.info("No available space in datacenter for request for %d "
-                     "MB RAM and %d CPU" % (ask_ram, ask_cpu))
-            send_results()
-            return
-
-        res.placement_found_provider_count += 1
-
-        provider_id = selected['id']
-        generation = selected['generation']
-
+    def claim(instance_uuid, res_template):
         start_trx_time = time.time()
         trans = conn.begin()
         try:
@@ -153,13 +124,9 @@ def run(args, request_queue, result_queue, done_event):
             # the same target resource provider
             rc = upd_res.rowcount
             if rc != 1:
-                res.claim_deadlock_count += 1
                 trx_time = time.time() - start_trx_time
                 res.add_claim_trx_time(trx_time)
-                sleep_time = random.uniform(0.01, 0.10)
-                res.claim_total_deadlock_sleep_time += sleep_time
-                time.sleep(sleep_time)
-                raise Exception("deadlocked, retrying transaction")
+                raise NoRowsMatched()
 
             trans.commit()
 
@@ -172,3 +139,79 @@ def run(args, request_queue, result_queue, done_event):
         except Exception as e:
             res.claim_trx_rollback_count += 1
             trans.rollback()
+            raise
+
+    while True:
+        # Grab an entry from the request queue. Entries are a tuple of the form
+        # (uuid, resource_template).
+        entry = request_queue.get()
+        if entry is None:
+            LOG.info("No more entries in request queue after processing "
+                     "%d requests. Sending results." % res.requests_processed_count)
+            send_results()
+            return
+
+        res.requests_processed_count += 1
+
+        instance_uuid = entry[0]
+        res_template = entry[1]
+        ask_ram = res_template[const.RAM_MB]
+        ask_cpu = res_template[const.VCPU]
+        cur_attempt = 1
+        attempts = 5
+
+        LOG.debug("Attempting to place instance %s request for %dMB RAM "
+                  "and %d vCPUs." % (instance_uuid, ask_ram, ask_cpu))
+
+        for attempt in range(attempts):
+            try:
+                start_placement_query_time = time.time()
+                selected = select_provider()
+                res.add_placement_query_time(time.time() - start_placement_query_time)
+                res.placement_query_count += 1
+
+                if not selected:
+                    res.placement_no_found_provider_count += 1
+                    LOG.debug("Did not find a provider with required inventory for "
+                              "requested %d MB RAM and %d CPU" % (ask_ram, ask_cpu))
+                    if (args.placement_strategy in ('random', 'random-pack', 'random-spread') and
+                            args.filter_strategy == 'db'):
+                        if res.placement_random_no_found_retry_count > random_no_found_threshold:
+                            msg = "Exceeded random retry threshold in partition %d. " % worker_number
+                            if args.placement_strategy in ('random-pack', 'random-spread'):
+                                backup_placement_strategy = args.placement_strategy.split('-')[1]
+                                msg += "Switching to '%s' placement strategy." % backup_placement_strategy
+                                args.placement_strategy = backup_placement_strategy
+                                LOG.info(msg)
+                            else:
+                                msg += "Exiting."
+                                LOG.info(msg)
+                                send_results()
+                                return
+
+                        # Due to the way the quick random ordering works in the DB
+                        # filtering when random placement strategy is used, there
+                        # may still be some room available, so let's just pop a retry.
+                        raise RandomNotFound
+                    elif ask_ram == smallest_ram:
+                        LOG.info("Partition %d full." % worker_number)
+                        send_results()
+                        return
+                    else:
+                        break  # Get next request
+
+                res.placement_found_provider_count += 1
+
+                provider_id = selected['id']
+                generation = selected['generation']
+
+                claim(instance_uuid, res_template)
+                break
+            except RandomNotFound:
+                res.placement_random_no_found_retry_count += 1
+            except NoRowsMatched:
+                res.claim_deadlock_count += 1
+                sleep_time = random.uniform(0.01, 0.10)
+                res.claim_total_deadlock_sleep_time += sleep_time
+                time.sleep(sleep_time)
+                LOG.debug("Got deadlock on claim. Retrying placement and claim.")
