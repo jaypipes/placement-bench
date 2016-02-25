@@ -124,6 +124,7 @@ def print_compiled_results(args, results, total_wallclock_time):
     claim_min_trx_time = min(r.claim_min_trx_time for r in results)
     claim_max_trx_time = max(r.claim_max_trx_time for r in results)
     claim_total_deadlock_sleep_time = sum(r.claim_total_deadlock_sleep_time for r in results)
+    success_claims_per_second = claim_success_count / total_wallclock_time
 
     if args.results_format == 'text':
         outfile.write("==============================================================\n")
@@ -138,6 +139,7 @@ def print_compiled_results(args, results, total_wallclock_time):
         outfile.write("  Number of scheduler processes:      %d\n" % len(results))
         outfile.write("  Number of requests processed:       %d\n" % requests_processed_count)
         outfile.write("  Total wallclock time:               %7.5f\n" % total_wallclock_time)
+        outfile.write("  Successful claims per second:       %7.5f\n" % success_claims_per_second)
         outfile.write("--------------------------------------------------------------\n")
         outfile.write(" Placement operations\n")
         outfile.write("--------------------------------------------------------------\n")
@@ -174,6 +176,7 @@ def print_compiled_results(args, results, total_wallclock_time):
                 "Number of worker processes",
                 "Count of requests processed",
                 "Total wallclock time",
+                "Successful claims per second",
                 "Placement query count",
                 "Placement found provider count",
                 "Placement no found provider count",
@@ -203,6 +206,7 @@ def print_compiled_results(args, results, total_wallclock_time):
             len(results),
             requests_processed_count,
             total_wallclock_time,
+            success_claims_per_second,
             placement_query_count,
             placement_found_provider_count,
             placement_no_found_provider_count,
@@ -238,6 +242,7 @@ def main():
                         default=False,
                         help="Show no output during run.")
     parser.add_argument('--results-format', choices=RESULTS_FORMAT_CHOICES,
+                        default='text',
                         help="The format of the resulting report.")
     parser.add_argument('--results-file',
                         help="If set, output results to supplied file "

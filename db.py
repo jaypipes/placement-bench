@@ -394,7 +394,7 @@ def placement_get_select(args, res_template, worker_number):
             - sql.func.ifnull(cpu_usage.c.used, 0) >= res_template[const.VCPU]
         )
         if args.partition_strategy == 'modulo':
-            where_conds += ((cn_tbl.c.id + args.workers) % worker_number == 0,)
+            where_conds += ((cn_tbl.c.id % args.workers) == worker_number,)
 
         if args.placement_strategy == 'pack':
             select = select.order_by(sql.func.ifnull(ram_usage.c.used, 0), cn_tbl.c.id)

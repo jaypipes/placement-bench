@@ -63,7 +63,7 @@ def run(args, request_queue, result_queue, done_event):
             filtered = []
             for row in records:
                 if args.partition_strategy == 'modulo':
-                    if ((row['id'] + args.workers) % worker_number) != 0:
+                    if ((row['id'] % args.workers) == worker_number) != 0:
                         continue
                 # Filter out by RAM
                 ram_available = (row['ram_total'] - row['ram_reserved']) * row['ram_allocation_ratio']
